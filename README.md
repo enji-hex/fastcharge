@@ -1,7 +1,7 @@
 
 # xray_controller.py
 
-> The most **stupid** tool to control XRAY configs, both server and client.
+> The most **stupid** tool to control XRAY configs on ur server
 
 I was got crazy about 3x-UI - the entire dashboard built only for `JSON` controlling. So I decided to make stupidly simple tool that control xray for my daily tasks
 
@@ -17,12 +17,11 @@ so it's not a ready tool, just template.
 
 # Project layout
 
-```
-src/ all .py files
-local/ 
-    - references for routing, server/client configs
-    - keys.json (keys for xray)
-
+```sh
+src/        # all .py files
+local/      
+    - # references for routing, server/client configs
+    - # keys.json (keys for xray)
 users.db
 ```
 
@@ -42,5 +41,5 @@ Update only src folder
 - [xray install](https://github.com/XTLS/Xray-install)
 - [xray config example](/usr/local/etc/xray/config.json)
 
-## todo
-- make embeded DB , keep original configs safe
+## TODO 
+- create one-liner autosetup for serevr
