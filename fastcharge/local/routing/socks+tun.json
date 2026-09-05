@@ -1,0 +1,73 @@
+{
+    "inbounds": [
+        {
+            "tag": "socks-in",
+            "port": 1080,
+            "listen": "127.0.0.1",
+            "protocol": "socks",
+            "settings": {
+                "auth": "noauth",
+                "udp": true,
+                "userLevel": 8
+            },
+            "sniffing": {
+                "enabled": true,
+                "destOverride": [
+                    "http",
+                    "tls",
+                    "quic"
+                ]
+            }
+        },
+        {
+            "tag": "tun-in",
+            "protocol": "tun",
+            "settings": {
+                "interfaceName": "xray0",
+                "mtu": 1280,
+                "autoRoute": true,
+                "strictRoute": true,
+                "stack": "system"
+            },
+            "sniffing": {
+                "enabled": true,
+                "destOverride": [
+                    "http",
+                    "tls",
+                    "quic"
+                ]
+            }
+        }
+    ],
+     "routing": {
+        "domainStrategy": "IPIfNonMatch",
+        "rules": [
+            {
+                "type": "field",
+                "ip": [
+                    "server_ip"
+                ],
+                "outboundTag": "direct"
+            },
+            {
+            "type": "field",
+            "protocol": [
+                "dns"
+            ],
+            "outboundTag": "dns-out"
+        },
+        {
+            "type": "field",
+            "inboundTag": [
+                "dns-out"
+            ],
+            "outboundTag": "direct"
+        },
+            {
+                "type": "field",
+                "outboundTag": "vless",
+                "port": "0-65535"
+            }
+        ]
+    }
+}

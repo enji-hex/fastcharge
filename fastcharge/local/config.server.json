@@ -1,0 +1,68 @@
+{
+    "log": {
+        "access": "/var/log/xray/access.log",
+        "loglevel": "warning"
+    },
+    "inbounds": [
+        {
+            "tag": "vless",
+            "port": 443,
+            "protocol": "vless",
+            "settings": {
+                "clients": [
+                   
+                ],
+                "decryption": "none"
+            },
+            "streamSettings": {
+                "network": "grpc",
+                "security": "reality",
+                "realitySettings": {
+                    "maxTimediff": 0,
+                    "privateKey": "KICQqlrrV_YMICod9RDFcjqF-WhMmEtVbADbVxCYZFU",
+                    "serverNames": [
+                        "yahoo.com"
+                    ],
+                    "shortIds": [
+                        "4fbc6faeb85e5b8e"
+                    ],
+                    "show": false,
+                    "target": "yahoo.com:443",
+                    "xver": 0
+                },
+                "tcpSettings": {
+                    "acceptProxyProtocol": false,
+                    "header": {
+                        "type": "none"
+                    }
+                },
+                "grpcSettings": {"serviceName": "speed-test-service"}
+            },
+            "sniffing": {
+                "enabled": true,
+                "destOverride": [
+                    "http",
+                    "tls",
+                    "quic",
+                    "fakedns"
+                ],
+                "metadataOnly": false,
+                "routeOnly": false
+            }
+        }
+    ],
+    "outbounds": [
+        {
+            "protocol": "freedom",
+            "tag": "direct"
+        },
+        {
+            "protocol": "blackhole",
+            "tag": "block"
+        }
+    ],
+    "routing": {
+        "domainStrategy": "AsIs",
+        "rules": []
+    }
+}

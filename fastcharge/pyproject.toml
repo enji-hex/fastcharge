@@ -1,0 +1,15 @@
+[project]
+name = "xray"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "aiofiles>=25.1.0",
+    "aiosqlite>=0.22.1",
+    "cryptography>=50.0.1",
+    "dotenv>=0.9.9",
+    "fastapi>=0.141.1",
+    "uvicorn>=0.52.4",
+]
+

@@ -1,0 +1,78 @@
+{
+    "dns": {
+        "hosts": {
+            "dns.google": "8.8.8.8",
+            "one.one.one.one": "1.1.1.1"
+        },
+        "queryStrategy": "UseIPv4",
+        "servers": [
+            "https://dns.google/dns-query",
+            "https://one.one.one.one/dns-query"
+        ]
+    },
+    "log": {
+        "level": "info"
+    },
+    "inbounds": [ "controlled by /routings/" ],
+    "outbounds": [
+        {
+            "tag": "vless",
+            "protocol": "vless",
+            "settings": {
+                "vnext": [
+                    {
+                        "address": "server_ip",
+                        "port": 100,
+                        "users": []
+                    }
+                ]
+            },
+            "streamSettings": {
+                "network": "grpc",
+                "security": "reality",
+                "realitySettings": {
+                    "serverName": "yahoo.com",
+                    "fingerprint": "firefox",
+                    "publicKey": "Lc-oZxwcfIqBYLlEZrf5sxggmnVDsoWqajU2tkMeZB4",
+                    "shortId": "4fbc6faeb85e5b8e"
+                },
+                "tcpSettings": {
+                    "header": {
+                        "type": "none"
+                    }
+                },
+                "mux": {
+                    "enabled": false,
+                    "concurrency": -1
+                },
+                "grpcSettings": {"serviceName": "speed-test-service"}
+
+            }
+        },
+        {
+            "tag": "direct",
+            "protocol": "freedom"
+        },
+        {
+            "tag": "block",
+            "protocol": "blackhole"
+        },
+        {
+            "tag": "dns-out",
+            "protocol": "dns"
+        }
+    ],
+    "policy": {
+        "levels": {
+            "8": {
+                "connIdle": 300,
+                "downlinkOnly": 1,
+                "handshake": 4,
+                "uplinkOnly": 1
+            }
+        }
+    },
+    "routing": {
+        "data": "controlled by /routings/"
+    }
+    }

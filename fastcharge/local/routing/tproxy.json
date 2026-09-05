@@ -1,0 +1,31 @@
+{
+    "inbounds": [
+        {
+            "tag": "tproxy-in",
+            "port": 1080,
+            "protocol": "dokodemo-door",
+            "settings": {
+                "network": "tcp,udp",
+                "followRedirect": true
+            },
+            "streamSettings": {
+                "sockopt": {
+                    "tproxy": "tproxy",
+                    "mark": 255
+                }
+            }
+        }
+    ],
+    "routing": {
+        "domainStrategy": "AsIs",
+        "rules": [
+            {
+                "type": "field",
+                "inboundTag": [
+                    "tproxy-in"
+                ],
+                "outboundTag": "vless"
+            }
+        ]
+    }
+}
