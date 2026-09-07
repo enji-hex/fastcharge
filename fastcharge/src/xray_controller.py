@@ -225,36 +225,41 @@ class XRAYController:
                 for c in i.get("settings", {}).get("clients", []):
                     if c.get("id") == id:
                         port = i["port"]
-                        reality = i["streamSettings"]["realitySettings"]
+                        stream = i.get("streamSettings", {})
+                        reality = stream.get("realitySettings", {})
 
-                        # Defensive list extraction
                         shortids = reality.get("shortIds", [""])
                         server_names = reality.get("serverNames", [""])
 
                         shortid = shortids[0] if shortids else ""
                         sni = server_names[0] if server_names else ""
-                        transport = i["streamSettings"]["network"]
-
-                        grpc_settings = i["streamSettings"].get(
-                            "grpcSettings", {}
-                        )
-                        service_name = grpc_settings.get("serviceName", "")
+                        transport = stream.get("network", "tcp")
 
                         params = {
-                            "type": transport,
-                            "security": "reality",
-                            "pbk": pubkey,
-                            "sid": shortid,
-                            "sni": sni,
-                            "fp": "chrome",
-                            "serviceName": service_name,
-                            "mode": "multi",
-                            "encryption": keys["encryption"],
+                            "type":transport,
+                            "security":"reality",
+                            "pbk":pubkey,
+                            "fp":"firefox",
+                            # "encryption":keys.get("encryption","none")
                         }
-                        if keys["encryption"] == "none":
-                            params["flow"] = "xtls-rprx-vision"
 
-                        query = urlencode(params, safe=":")
+                        if transport == "tcp":
+                            params['flow'] = 'xtls-rprx-vision'
+                        elif transport == 'grpc':
+                            grpc_settings = stream.get("grpcSettings", {})
+                            service_name = grpc_settings.get("serviceName", "")
+                            if service_name:
+                                params["serviceName"] = service_name
+                                params["mode"] = "multi"
+
+                        if shortid:
+                            params["sid"] = shortid
+                        if sni:
+                            params["sni"] = sni
+                        
+                        clean_params = {k:v for k,v in params.items() if v}
+
+                        query = urlencode(clean_params, safe=":")
                         return f"vless://{id}@{self.ip}:{port}?{query}#{quote(tag)}"
 
         return None
