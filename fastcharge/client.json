@@ -1,0 +1,164 @@
+{
+    "dns": {
+        "hosts": {
+            "dns.google": "8.8.8.8",
+            "one.one.one.one": "1.1.1.1"
+        },
+        "queryStrategy": "UseIPv4",
+        "servers": [
+            "https://dns.google/dns-query",
+            "https://one.one.one.one/dns-query"
+        ]
+    },
+    "log": {
+        "level": "info"
+    },
+    "inbounds": [
+        {
+            "tag": "socks-in",
+            "port": 1080,
+            "listen": "127.0.0.1",
+            "protocol": "socks",
+            "settings": {
+                "auth": "noauth",
+                "udp": true,
+                "userLevel": 8
+            },
+            "sniffing": {
+                "enabled": true,
+                "destOverride": [
+                    "http",
+                    "tls",
+                    "quic"
+                ]
+            }
+        },
+        {
+            "tag": "tun-in",
+            "protocol": "tun",
+            "settings": {
+                "interfaceName": "xray0",
+                "mtu": 1280,
+                "autoRoute": true,
+                "strictRoute": true,
+                "stack": "system"
+            },
+            "sniffing": {
+                "enabled": true,
+                "destOverride": [
+                    "http",
+                    "tls",
+                    "quic"
+                ]
+            }
+        }
+    ],
+    "outbounds": [
+        {
+            "tag": "direct",
+            "protocol": "freedom"
+        },
+        {
+            "tag": "block",
+            "protocol": "blackhole"
+        },
+        {
+            "tag": "dns-out",
+            "protocol": "dns"
+        },
+        {
+            "tag": "vless",
+            "protocol": "vless",
+            "settings": {
+                "vnext": [
+                    {
+                        "address": "real_ip",
+                        "port": 443,
+                        "users": []
+                    }
+                ]
+            },
+            "streamSettings": {
+                "network": "tcp",
+                "security": "reality",
+                "realitySettings": {
+                    "serverName": "www.wikipedia.org",
+                    "fingerprint": "firefox",
+                    "publicKey": "PduoQL03pr9iVe_I6xNYc_asF_4CUiZaTwH873fQtXA",
+                    "shortId": "990d2926ef96fa89"
+                },
+                "tcpSettings": {
+                    "header": {
+                        "type": "none"
+                    }
+                },
+                "mux": {
+                    "enabled": false,
+                    "concurrency": -1
+                }
+            }
+        }
+    ],
+    "policy": {
+        "levels": {
+            "8": {
+                "connIdle": 300,
+                "downlinkOnly": 1,
+                "handshake": 4,
+                "uplinkOnly": 1
+            }
+        }
+    },
+    "routing": {
+        "domainStrategy": "IPIfNonMatch",
+        "rules": [
+            {
+                "type": "field",
+                "ip": [
+                    "real_ip"
+                ],
+                "outboundTag": "direct"
+            },
+            {
+                "type": "field",
+                "ip": [
+                    "geoip:private"
+                ],
+                "outboundTag": "direct"
+            },
+            {
+                "type": "field",
+                "domain": [
+                    "geosite:ru"
+                ],
+                "outboundTag": "direct"
+            },
+            {
+                "type": "field",
+                "ip": [
+                    "geoip:ru"
+                ],
+                "outboundTag": "direct"
+            },
+            {
+                "type": "field",
+                "protocol": [
+                    "dns"
+                ],
+                "outboundTag": "dns-out"
+            },
+            {
+                "type": "field",
+                "inboundTag": [
+                    "dns-out"
+                ],
+                "outboundTag": "direct"
+            },
+            {
+                "type": "field",
+                "port": "0-65535",
+                "outboundTag": "vless"
+            }
+        ]
+    }
+}

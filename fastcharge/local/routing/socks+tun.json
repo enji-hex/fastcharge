@@ -39,34 +39,41 @@
             }
         }
     ],
-     "routing": {
+    "routing": {
         "domainStrategy": "IPIfNonMatch",
         "rules": [
             {
                 "type": "field",
                 "ip": [
-                    "server_ip"
+                    
                 ],
                 "outboundTag": "direct"
             },
             {
-            "type": "field",
-            "protocol": [
-                "dns"
-            ],
-            "outboundTag": "dns-out"
-        },
-        {
-            "type": "field",
-            "inboundTag": [
-                "dns-out"
-            ],
-            "outboundTag": "direct"
-        },
+                "type": "field",
+                "ip": [
+                    "geoip:private"
+                ],
+                "outboundTag": "direct"
+            },
             {
                 "type": "field",
-                "outboundTag": "vless",
-                "port": "0-65535"
+                "protocol": [
+                    "dns"
+                ],
+                "outboundTag": "dns-out"
+            },
+            {
+                "type": "field",
+                "inboundTag": [
+                    "dns-out"
+                ],
+                "outboundTag": "direct"
+            },
+            {
+                "type": "field",
+                "port": "0-65535",
+                "outboundTag": "vless"
             }
         ]
     }

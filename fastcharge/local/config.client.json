@@ -13,7 +13,10 @@
     "log": {
         "level": "info"
     },
-    "inbounds": [ "controlled by /routings/" ],
+    
+    "inbounds": [
+        "controlled by /routings/"
+    ],
     "outbounds": [
         {
             "tag": "vless",
@@ -45,8 +48,9 @@
                     "enabled": false,
                     "concurrency": -1
                 },
-                "grpcSettings": {"serviceName": "speed-test-service"}
-
+                "grpcSettings": {
+                    "serviceName": "speed-test-service"
+                }
             }
         },
         {
@@ -75,4 +79,4 @@
     "routing": {
         "data": "controlled by /routings/"
     }
-    }
+}

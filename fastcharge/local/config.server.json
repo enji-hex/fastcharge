@@ -1,11 +1,11 @@
 {
     "log": {
         "access": "/var/log/xray/access.log",
-        "loglevel": "warning"
+        "loglevel": "info"
     },
     "inbounds": [
         {
-            "tag": "vless",
+            "tag": "proxy",
             "port": 443,
             "protocol": "vless",
             "settings": {

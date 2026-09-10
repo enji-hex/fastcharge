@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 import uuid
 
 from dotenv import load_dotenv
@@ -11,40 +11,75 @@ from argparse import ArgumentParser
 from fastapi import FastAPI, HTTPException, Request, Security,status,Response,Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
-
+from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
+from fastapi.openapi.utils import get_openapi
 
 from db import utc_now,parse_utc,DBClient,UserModel
 from xray_controller import XRAYController, fprint
 
+
 controller: XRAYController  = None
-database: DBClient  = None
+database: DBClient          = None
+API_KEY:str                 = None
+API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
+VERSION = "1.0.2"
 
-api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+async def verify_api_key(request: Request):
+    # Header (X-API-Key) - for SDK
+    api_key = request.headers.get("X-API-Key")
+    
+    # query/cookie mostly for developers 
+    if not api_key:
+        api_key = request.query_params.get("api_key")
+        
+    if not api_key:
+        api_key = request.cookies.get("api_key")
 
-
-async def verify_api_key(api_key_header:str = Security(api_key_header)):
-    if api_key_header != API_KEY:
+    if api_key != API_KEY:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing API Key"
         )
-    return api_key_header
+    return api_key
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global controller, database,API_KEY
-    database = await DBClient.Create()
     load_dotenv()
+    database = await DBClient.Create()
     server_ip:str   = os.getenv("server_ip","")
-    server_port     = os.getenv("server_port","8080")
-    print('fastcharge started')
 
-    API_KEY = os.getenv("API_KEY")
+    try:
+        server_port     = int(os.getenv("server_port","8080"))
+    except Exception as err:
+        raise Exception(f"Error get server port from .env {err}")
+
+    API_KEY = os.getenv("API_KEY","")
     SERVER_CONF = os.getenv('server_config_path')
     if not API_KEY or not SERVER_CONF:
         raise Exception("Error API_KEY not found")
 
-    controller = XRAYController(ip=server_ip,server_config_path=SERVER_CONF)
+    # Idempotent generate new key pair if not exists
+    keys = await database.get_keys()
+    keys_model = None
+    if not keys:
+        keys_model = XRAYController.generate_reality_keys(mlken=False)
+        await database.set_keys(keys_model)
+    if keys_model is not None:
+        keys = keys_model
+        
+
+    controller = XRAYController(ip=server_ip,
+                                port=server_port,
+                                sni=os.getenv('sni',''),
+                                tag=os.getenv('tag',''),
+                                server_config_path=SERVER_CONF,
+                                keys=keys)
+    
+    await controller.update_reality_key(block_torrents=True)
+    active_users = await database.get_active_users()
+    await controller.merge_vless_clients(active_users)
+
 
     task = asyncio.create_task(purge_task())
     yield
@@ -52,18 +87,34 @@ async def lifespan(app: FastAPI):
     await database.close()
 
 app = FastAPI(
-    version="1.0.0",
+    version=VERSION,
     lifespan=lifespan,
-    dependencies=[Depends(verify_api_key)],
     docs_url=None,
     redoc_url=None,
     )
+
+
+# Secure docs
+@app.get("/docs", include_in_schema=False)
+async def get_swagger_documentation(api_key: str = Depends(verify_api_key)):
+    # Crucial: pass the key into openapi_url so Swagger UI can fetch the JSON spec
+    return get_swagger_ui_html(
+        openapi_url=f"/openapi.json?api_key={api_key}", 
+        title="Secure Docs"
+    )
+
+@app.get("/openapi.json", include_in_schema=False, dependencies=[Depends(verify_api_key)])
+async def get_open_api_endpoint():
+    return get_openapi(title="Secure API", version=VERSION, routes=app.routes)
+
+
 
 @app.post(
     "/user/add/{user_id}",
     summary="Register new user by their id (str)",
     tags=["User"],
-    status_code=status.HTTP_201_CREATED)
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(verify_api_key)])
 async def add_user(user_id: str):
     user = await database.get_user(user_id)
     if user:
@@ -80,7 +131,8 @@ async def add_user(user_id: str):
 @app.get(
     "/user/get/{user_id}",
     summary="Gather user info by user_id",
-    tags=["User"],)
+    tags=["User"],
+    dependencies=[Depends(verify_api_key)])
 async def get_user(user_id:str):
     user = await database.get_user(user_id)
     if user is  None:
@@ -91,7 +143,8 @@ async def get_user(user_id:str):
 @app.get(
     "/users/get",
     summary="Gather all users",
-    tags=["User"],)
+    tags=["User"],
+    dependencies=[Depends(verify_api_key)])
 async def get_users():
     users:List[UserModel] = await database.get_users()
     res = []
@@ -114,17 +167,37 @@ async def get_sub(user_id: str):
     if parse_utc(user.cancel_date) < utc_now():
         raise HTTPException(status_code=403, detail="Subscription expired")
 
-    link  =  await controller.export_vless("vless", user.config_id)
+    link  =  await controller.export_vless(user.config_id)
     if not link:
         raise HTTPException(status_code=500, detail="Failed to generate link")
 
     return {"link": link}
 
+@app.get(
+    "/sub/get/json/{user_id}",
+    summary="Get subscription json configuration",
+    tags=["Subscription"]
+    )
+async def get_json_sub(user_id: str,ru_bypass:bool = True):
+    user = await database.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    
+    if parse_utc(user.cancel_date) < utc_now():
+        raise HTTPException(status_code=403, detail="Subscription expired")
+
+    node = await controller.export_client_outbound(user.config_id)
+    config  =  await controller.export_full_client_config([node], ru_bypass)
+
+    return config
+
 @app.post(
     "/sub/add/{user_id}",
     summary="Update user subscription cancel_date and " \
     "add user into xray configuration",
-    tags=["Subscription"]
+    tags=["Subscription"],
+    dependencies=[Depends(verify_api_key)]
     )
 async def add_sub(user_id:str,request:Request):
     user = await database.get_user(user_id)
@@ -144,36 +217,8 @@ async def add_sub(user_id:str,request:Request):
     
     await database.upd_user_cancel_date(user_id,normalized_iso)
     active_users = await database.get_active_users()
-    await controller.merge_vless_clients(active_users,'vless')
+    await controller.merge_vless_clients(active_users)
     return {"msg":"success"}
-
-async def setup(block_torrents:bool = True):
-    global controller
-    
-
-    load_dotenv()
-    server_ip:str   = os.getenv("server_ip","")
-    server_port     = os.getenv("server_port","8080")
-
-    SERVER_CONF = os.getenv('server_config_path')
-    if not SERVER_CONF:
-        raise Exception("Error API_KEY not found")
-
-    controller = XRAYController(server_ip,SERVER_CONF)
-    routing = "socks+tun"
-    tag = "vless"
-    sni = "www.wikipedia.org"
-
-    controller.generate_reality_keys(save=True, mlken=False)
-    await controller.update_reality_key(tag, sni, server_port, "tcp", 
-                                        block_torrents=block_torrents,
-                                        routing=routing)
-
-    fprint(
-        ("address", f"{server_ip}:{server_port}"), 
-        ("routing", routing), 
-        ("SNI", sni)
-    )
 
 async def purge_task():
     global database,controller
@@ -181,22 +226,5 @@ async def purge_task():
         # start purge task immediately, to update users ( purge inactive )
         if database and controller:
             active_users = await database.get_active_users()
-            await controller.merge_vless_clients(active_users,'vless')
+            await controller.merge_vless_clients(active_users)
         await asyncio.sleep(7200) # 2H
-                    
-
-# dev ENV
-# start from ./fastcharge
-# uvicorn  main:app --app-dir src --host 0.0.0.0 --port 8000 
-# --ssl-keyfile key.pem --ssl-certfile cert.pem --no-server-header
-def main():
-    parser = ArgumentParser()
-    parser.add_argument('-s','--setup',action='store_true')
-    parser.add_argument('-bt','--block-torrents',action='store_true')
-
-    args = parser.parse_args()
-    if args.setup:
-        asyncio.run(setup(args.block_torrents))
-
-if __name__ == "__main__":
-    main()

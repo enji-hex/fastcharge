@@ -5,16 +5,16 @@ from cryptography.hazmat.primitives import serialization
 from urllib.parse import urlencode, quote
 import aiofiles
 from pathlib import Path
-from typing import Dict, List, Literal
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
-from db import UserModel
+from db import UserModel, KeysModel
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-SERVER_SRC_CONFIG_PATH = PROJECT_ROOT / "local"/ "config.server.json"
-CLIENT_SRC_CONFIG_PATH = PROJECT_ROOT / "local"/ "config.client.json"
-
+SERVER_SRC_CONFIG_PATH = PROJECT_ROOT / "local" / "config.server.json"
+CLIENT_SRC_CONFIG_PATH = PROJECT_ROOT / "local" / "config.signbox.json"
 CLIENT_CONFIG_PATH = PROJECT_ROOT / "./config.client.json"
+
 
 def fprint(*l):
     """Print tag W20 data"""
@@ -22,10 +22,23 @@ def fprint(*l):
 
 
 class XRAYController:
-    def __init__(self,ip:str,server_config_path:str) -> None:
+    def __init__(
+        self,
+        ip: str,
+        port: int,
+        sni: str,
+        tag: str,
+        server_config_path: str,
+        keys: KeysModel,
+    ) -> None:
         self.ip = ip
+        self.port = port
+        self.sni = sni
+        self.tag = tag
         self._lock = asyncio.Lock()
         self.server_config_path = server_config_path
+        self.client_config_path = CLIENT_CONFIG_PATH
+        self.keys = keys
 
     async def load_config(self, conf_path) -> dict:
         async with aiofiles.open(conf_path, encoding="utf-8") as f:
@@ -37,93 +50,47 @@ class XRAYController:
             await f.write(json.dumps(data, indent=4))
 
     async def _restart_xray(self):
-        proc = await asyncio.create_subprocess_exec("systemctl","restart","xray")
+        proc = await asyncio.create_subprocess_exec("systemctl", "restart", "xray")
         await proc.wait()
 
     async def update_reality_key(
         self,
-        tag,
-        sni: str,
-        server_port,
-        transport: Literal["tcp", "grpc"],
-        block_torrents:bool = False,
-        keys=None,
-        *,
-        routing: Literal["socks+tun", "tproxy"],
+        block_torrents: bool = False,
     ):
         """Update keys in server,client configs"""
 
-        if routing is None:
-            raise Exception("No routing startegy provided")
-
         server_config = await self.load_config(SERVER_SRC_CONFIG_PATH)
-        client_config = await self.load_config(CLIENT_SRC_CONFIG_PATH)
+        inbound = server_config.get("inbounds", [])[0]
 
-        if keys is None:
-            keys = await self.load_config("local/keys.json")
+        inbound["tag"] = self.tag
+        inbound["port"] = self.port
+        inbound["streamSettings"]["realitySettings"]["privateKey"] = self.keys.private
+        inbound["streamSettings"]["realitySettings"]["shortIds"]   = [self.keys.short_id]
+        inbound["streamSettings"]["realitySettings"]["serverNames"] = [self.sni]
+        inbound["streamSettings"]["realitySettings"]["target"] = f"{self.sni}:443"
+        inbound["streamSettings"]["network"] = 'tcp'
+        inbound["settings"]["decryption"] = self.keys.decryption
 
-        ok = False
-        # INBOUNDS/ROUTING
-        routing_conf = await self.load_config(f"./local/routing/{routing}.json")
-        client_config["inbounds"] = routing_conf["inbounds"]
-        client_config["routing"]  = routing_conf["routing"]
-
-        for inbound in server_config.get("inbounds",[]):
-            if inbound.get("tag") == tag:
-                inbound["port"]  = server_port
-                inbound["streamSettings"]["realitySettings"]["privateKey"] = keys[
-                    "private"
-                ]
-                inbound["streamSettings"]["realitySettings"]["shortIds"] = [
-                    keys["short_id"]
-                ]
-                inbound["streamSettings"]["realitySettings"]["serverNames"] = [sni]
-                inbound["streamSettings"]["realitySettings"]["target"] = f"{sni}:443"
-                inbound["streamSettings"]["network"] = transport
-                inbound["settings"]["decryption"] = keys["decryption"]
-        
         if block_torrents:
-            server_config.get('routing',{}).get('rules',[]).append(
-                {
-                    "type": "field",
-                    "protocol": ["bittorrent"],
-                    "outboundTag": "block"
-                }
+            server_config.get("routing", {}).get("rules", []).append(
+                {"type": "field", "protocol": ["bittorrent"], "outboundTag": "block"}
             )
 
-        for outbound in client_config.get("outbounds",[]):
-            if outbound.get("tag") == tag:
-                outbound["streamSettings"]["realitySettings"]["publicKey"] = keys[
-                    "public"
-                ]
-                outbound["streamSettings"]["realitySettings"]["shortId"] = keys[
-                    "short_id"
-                ]
-                outbound["streamSettings"]["realitySettings"]["serverName"] = sni
-                outbound["streamSettings"]["network"] = transport
-                outbound["settings"]["vnext"][0]["address"] = self.ip
-                outbound["settings"]["vnext"][0]["port"] = int(server_port)
-                ok = True
-        for rule in client_config["routing"]["rules"]:
-            if "ip" in rule and rule["ip"][0] == "server_ip":
-                rule["ip"][0] = self.ip
+        await self.save_config(self.server_config_path, server_config)
+        print(f'keys updated ')
+   
 
-        if ok:
-            await self.save_config(self.server_config_path, server_config)
-            await self.save_config(CLIENT_CONFIG_PATH, client_config)
-        else:
-            print(f"Err tag:{tag} not found")
-
-    def generate_mlken(self):
+    @staticmethod
+    def generate_mlken():
         out = subprocess.check_output("./xray vlessenc".split(" "))
         out = str(out).split("Post-Quantum")[-1]
         decryption, encryption = re.findall(r"mlkem[\w|\d|.|-]*", out)
         return decryption.strip(), encryption.strip()
 
-    def generate_reality_keys(self, save=False, mlken=True):
+    @staticmethod
+    def generate_reality_keys(mlken=True) -> KeysModel:
         """
         Automatic set keys in the config
-        - save: save keys into keys.json
         return new keys
         """
 
@@ -152,76 +119,50 @@ class XRAYController:
         short_id = os.urandom(8).hex()
         decryption, encryption = None, None
         if mlken:
-            decryption, encryption = self.generate_mlken()
+            decryption, encryption = XRAYController.generate_mlken()
 
-        keys = {
-            "private": private_b64,
-            "public": public_b64,
-            "short_id": short_id,
-            "decryption": decryption if decryption is not None else "none",
-            "encryption": encryption if encryption is not None else "none",
-        }
-        if save:
-            json.dump(keys, open("local/keys.json", "w"), indent=4)
+        keys = KeysModel(
+            private=private_b64,
+            public=public_b64,
+            short_id=short_id,
+            decryption=decryption if decryption is not None else "none",
+            encryption=encryption if encryption is not None else "none",
+        )
         return keys
-        
-    async def merge_vless_clients(self, users: List[UserModel],tag: str, keys=None):
+
+    async def merge_vless_clients(self, users: List[UserModel]):
         """
         Internal
         - inject client list into xray.server.config
         - export into server configs
         """
         async with self._lock:
-            if keys is None:
-                keys = await self.load_config("local/keys.json")
 
             server_config = await self.load_config(self.server_config_path)
-            # client_config = await self.load_config(CLIENT_CONFIG_PATH)
-            flow = "xtls-rprx-vision" if keys["encryption"] == "none" else None
+            flow = "xtls-rprx-vision" if self.keys.encryption == "none" else None
 
             new_server_clients = [
                 {
-                    "id": u.config_id, 
+                    "id": u.config_id,
                     "email": u.user_id,
-                    "level": 8, 
-                    **({"flow": flow} if flow else {})
+                    "level": 8,
+                    **({"flow": flow} if flow else {}),
                 }
                 for u in users
             ]
-            # new_client_users = [
-            #     {
-            #         "id": u.config_id,
-            #         "encryption": keys["encryption"], 
-            #         "level": 8, 
-            #         **({"flow": flow} if flow else {})
-            #     }
-            #     for u in users
-            # ]
 
-            for inbound in server_config.get("inbounds",[]):
-                if inbound.get("tag") == tag:
+            for inbound in server_config.get("inbounds", []):
+                if inbound.get("tag") == self.tag:
                     inbound["settings"]["clients"] = new_server_clients
 
-                # append to client config
-            # for outbound in client_config.get("outbounds",[]):
-            #     if outbound["tag"] == tag:
-            #         outbound["settings"]["vnext"][0]["users"] = new_client_users
-                
-            await self.save_config(self.server_config_path,server_config)
-            # await self.save_config(CLIENT_CONFIG_PATH,client_config)
-            
+            await self.save_config(self.server_config_path, server_config)
             await self._restart_xray()
-        
 
-    async def export_vless(self, tag: str, id: str, keys=None):
-        if keys is None:
-            keys = await self.load_config("local/keys.json")
-
+    async def export_vless(self, id: str):
         server_config = await self.load_config(self.server_config_path)
-        pubkey = (await self.load_config("local/keys.json"))["public"]
 
         for i in server_config.get("inbounds", []):
-            if i.get("tag") == tag:
+            if i.get("tag") == self.tag:
                 for c in i.get("settings", {}).get("clients", []):
                     if c.get("id") == id:
                         port = i["port"]
@@ -236,16 +177,16 @@ class XRAYController:
                         transport = stream.get("network", "tcp")
 
                         params = {
-                            "type":transport,
-                            "security":"reality",
-                            "pbk":pubkey,
-                            "fp":"firefox",
+                            "type": transport,
+                            "security": "reality",
+                            "pbk": self.keys.public,
+                            "fp": "firefox",
                             # "encryption":keys.get("encryption","none")
                         }
 
                         if transport == "tcp":
-                            params['flow'] = 'xtls-rprx-vision'
-                        elif transport == 'grpc':
+                            params["flow"] = "xtls-rprx-vision"
+                        elif transport == "grpc":
                             grpc_settings = stream.get("grpcSettings", {})
                             service_name = grpc_settings.get("serviceName", "")
                             if service_name:
@@ -256,10 +197,90 @@ class XRAYController:
                             params["sid"] = shortid
                         if sni:
                             params["sni"] = sni
-                        
-                        clean_params = {k:v for k,v in params.items() if v}
+
+                        clean_params = {k: v for k, v in params.items() if v}
 
                         query = urlencode(clean_params, safe=":")
-                        return f"vless://{id}@{self.ip}:{port}?{query}#{quote(tag)}"
+                        return f"vless://{id}@{self.ip}:{port}?{query}#{quote(self.tag)}"
 
         return None
+
+    async def export_client_outbound(
+        self, config_id: str
+    ) -> Optional[Tuple[str, dict]]:
+        """Collect client config works even from other servers"""
+
+        client_config = await self.load_config(CLIENT_SRC_CONFIG_PATH)
+        out = None
+
+        for outbound in client_config.get("outbounds", []):
+            if outbound.get("tag") == "proxy":
+                out = outbound
+                out['flow'] = 'xtls-rprx-vision'
+                out["tag"] = self.tag
+                out['tls']["reality"]["public_key"] = self.keys.public
+                out['tls']["reality"]["short_id"] = self.keys.short_id
+                out["tls"]["server_name"] = self.sni
+                out["server"] = self.ip
+                out["server_port"] = self.port
+                out["uuid"] = config_id
+
+        if out:
+            return self.ip, out
+        else:
+            return None
+
+    async def export_full_client_config(
+        self,
+        client_nodes: List[dict],
+        ru_bypass=False,  # direct routing for RU domains
+    ):
+        """Export client config as json"""
+        client_config = await self.load_config(CLIENT_SRC_CONFIG_PATH)
+
+        # INBOUNDS/ROUTING
+        routing_conf = await self.load_config(f"./local/routing/socks+tun.signbox.json")
+        if ru_bypass:
+            routing_conf["route"]["rule_set"] = [
+                {
+                    "tag": "geoip-ru",
+                    "type": "remote",
+                    "format": "binary",
+                    "url": "https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-ru.srs",
+                    "download_detour": "direct-out",
+                },
+                {
+                    "tag": "geosite-ru",
+                    "type": "remote",
+                    "format": "binary",
+                    "url": "https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-ru.srs",
+                    "download_detour": "direct-out"
+                }
+            ]
+
+        client_config["inbounds"] = routing_conf["inbounds"]
+        client_config["route"] = routing_conf["route"]
+
+        client_config.get("outbounds", []).pop(0)
+        server_ips = []
+        for el in client_nodes:
+            client_config["outbounds"].append(el[1])
+            server_ips.append(el[0])
+
+        client_config["route"]["rules"].insert(
+            0, {"ip_cidr": server_ips, "action": "route", "outbound": "direct-out"}
+        )
+        if ru_bypass:
+            client_config["route"]["rules"].insert(
+                1, {
+                    "rule_set": [
+                        "geoip-ru",
+                        "geosite-ru"
+                        ], 
+                    "action": 
+                    "route", 
+                    "outbound": "direct-out"}
+            )
+
+        client_config["route"]["final"] = self.tag
+        return client_config

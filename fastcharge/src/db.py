@@ -1,7 +1,8 @@
-from typing import List, Self
+from typing import List, Optional, Self
 import aiosqlite
 from datetime import datetime, timezone
 from pydantic import BaseModel
+import os
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -12,31 +13,70 @@ def parse_utc(iso_str) -> datetime:
         return dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
 
-
 class UserModel(BaseModel):
     user_id: str
     config_id: str
     cancel_date: str
+
+class KeysModel(BaseModel):
+    private: str
+    public: str
+    short_id: str
+    decryption: str
+    encryption: str
 
 class DBClient:
     def __init__(self, conn: aiosqlite.Connection) -> None:
         self.conn = conn
 
     @classmethod
-    async def Create(cls, db_path: str = "users.db") -> Self:
+    async def Create(cls, db_path: str = "./files/users.db") -> Self:
+        os.makedirs('./files',exist_ok=True)
         conn = await aiosqlite.connect(db_path)
         # Enable dictionary-like row mapping for UserModel (**dict(row))
         conn.row_factory = aiosqlite.Row
         
-        await conn.execute("""
+        await conn.executescript("""
             CREATE TABLE IF NOT EXISTS users (
                 user_id TEXT NOT NULL PRIMARY KEY, -- Telegram user_id
                 config_id TEXT NOT NULL,           -- XRAY user_id
                 cancel_date TEXT                   -- ISO-8601
             );
-        """)
+                           
+            CREATE TABLE IF NOT EXISTS keys (
+                id          INTEGER PRIMARY KEY CHECK (id = 1),
+                private     TEXT NOT NULL,           
+                public      TEXT NOT NULL,           
+                short_id    TEXT NOT NULL,           
+                decryption  TEXT NOT NULL,           
+                encryption  TEXT NOT NULL       
+            );
+        """,)
         await conn.commit()
         return cls(conn)
+
+    async def set_keys(self,keys:KeysModel):
+        """
+        Only one key instance allowed, 
+        keys stored in sqlite db to provide one-file storage
+        """
+        await self.conn.execute("DELETE FROM keys;")
+        await self.conn.execute(
+            """
+            INSERT INTO keys (private,public,short_id,decryption,encryption)
+            VALUES (?, ?, ? ,? ,?);
+            """,
+            (keys.private,keys.public,keys.short_id,keys.decryption,keys.encryption)
+        )
+        await self.conn.commit()
+
+    async def get_keys(self) -> Optional[KeysModel]:
+        async with self.conn.execute(
+            """
+            SELECT private,public,short_id,decryption,encryption FROM keys;
+            """) as curosr:
+            row = await curosr.fetchone()
+            return KeysModel(**dict(row)) if row else None
 
     async def add_user(self, user_id: str, config_id: str) -> UserModel:
         """Register a new user."""
