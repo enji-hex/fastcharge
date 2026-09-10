@@ -281,6 +281,10 @@ class XRAYController:
                     "route", 
                     "outbound": "direct-out"}
             )
+        
+        for r in client_config["route"]["rules"]:
+            if r['action'] == 'route':
+                r['outbound'] = self.tag
 
         client_config["route"]["final"] = self.tag
         return client_config
