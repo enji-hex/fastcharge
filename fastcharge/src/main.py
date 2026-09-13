@@ -1,6 +1,7 @@
 from typing import List, Optional
 import uuid
 
+import aiofiles
 from dotenv import load_dotenv
 import os
 import asyncio
@@ -8,7 +9,7 @@ from datetime import datetime, timezone
 
 from contextlib import asynccontextmanager
 from argparse import ArgumentParser
-from fastapi import FastAPI, HTTPException, Request, Security,status,Response,Depends
+from fastapi import FastAPI, HTTPException, Request, Security,status,Response,Depends,UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
 from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
@@ -108,7 +109,6 @@ async def get_open_api_endpoint():
     return get_openapi(title="Secure API", version=VERSION, routes=app.routes)
 
 
-
 @app.post(
     "/user/add/{user_id}",
     summary="Register new user by their id (str)",
@@ -153,6 +153,23 @@ async def get_users():
         res.append(u.model_dump())
     return {"users":res}
 
+@app.post(
+    "/update",
+    summary="Update current database",
+    tags=["Control"],
+    dependencies=[Depends(verify_api_key)])
+async def update_state(file:UploadFile):
+    fcontent = await file.read()
+    
+    try:
+        await database.reconnect(fcontent)
+    except Exception as err:
+        raise HTTPException(status_code=505,detail=str(err))
+    
+    active_users = await database.get_active_users()
+    await controller.merge_vless_clients(active_users)
+    return {"msg":"database was updates"}
+
 @app.get(
     "/sub/get/{user_id}",
     summary="Get subscription link by user_id",
@@ -173,24 +190,24 @@ async def get_sub(user_id: str):
 
     return {"link": link}
 
-@app.get(
-    "/sub/get/json/{user_id}",
-    summary="Get subscription json configuration",
-    tags=["Subscription"]
-    )
-async def get_json_sub(user_id: str,ru_bypass:bool = True):
-    user = await database.get_user(user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+# @app.get(
+#     "/sub/get/json/{user_id}",
+#     summary="Get subscription json configuration",
+#     tags=["Subscription"]
+#     )
+# async def get_json_sub(user_id: str,ru_bypass:bool = True):
+#     user = await database.get_user(user_id)
+#     if not user:
+#         raise HTTPException(status_code=404, detail="User not found")
 
     
-    if parse_utc(user.cancel_date) < utc_now():
-        raise HTTPException(status_code=403, detail="Subscription expired")
+#     if parse_utc(user.cancel_date) < utc_now():
+#         raise HTTPException(status_code=403, detail="Subscription expired")
 
-    node = await controller.export_client_outbound(user.config_id)
-    config  =  await controller.export_full_client_config([node], ru_bypass)
+#     node = await controller.export_client_outbound(user.config_id)
+#     config  =  await controller.export_full_client_config([node], ru_bypass)
 
-    return config
+#     return config
 
 @app.post(
     "/sub/add/{user_id}",

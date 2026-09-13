@@ -20,7 +20,6 @@ def fprint(*l):
     """Print tag W20 data"""
     print("\n".join(f'{f"§ {t}":<20}{d}' for t, d in l))
 
-
 class XRAYController:
     def __init__(
         self,
@@ -57,7 +56,10 @@ class XRAYController:
         self,
         block_torrents: bool = False,
     ):
-        """Update keys in server,client configs"""
+        """
+        Srever side function 
+        Update keys in server,client configs
+        """
 
         server_config = await self.load_config(SERVER_SRC_CONFIG_PATH)
         inbound = server_config.get("inbounds", [])[0]
@@ -67,7 +69,7 @@ class XRAYController:
         inbound["streamSettings"]["realitySettings"]["privateKey"] = self.keys.private
         inbound["streamSettings"]["realitySettings"]["shortIds"]   = [self.keys.short_id]
         inbound["streamSettings"]["realitySettings"]["serverNames"] = [self.sni]
-        inbound["streamSettings"]["realitySettings"]["target"] = f"{self.sni}:443"
+        inbound["streamSettings"]["realitySettings"]["target"]  = f"{self.sni}:443"
         inbound["streamSettings"]["network"] = 'tcp'
         inbound["settings"]["decryption"] = self.keys.decryption
 
@@ -134,7 +136,7 @@ class XRAYController:
         """
         Internal
         - inject client list into xray.server.config
-        - export into server configs
+        - restarts xray service
         """
         async with self._lock:
 
@@ -240,6 +242,21 @@ class XRAYController:
 
         # INBOUNDS/ROUTING
         routing_conf = await self.load_config(f"./local/routing/socks+tun.signbox.json")
+
+        # Construct top-priority rules
+        server_ips = []
+        for el in client_nodes:
+            client_config["outbounds"].append(el[1])
+            server_ips.append(el[0])
+
+        prepend_rules = [
+            # 1. Route VPS server IPs directly to prevent loops
+            {"ip_cidr": server_ips, "action": "route", "outbound": "direct-out"},
+            # 2. Bypass local private network traffic
+            {"ip_is_private": True, "action": "route", "outbound": "direct-out"},
+        ]
+        
+
         if ru_bypass:
             routing_conf["route"]["rule_set"] = [
                 {
@@ -257,34 +274,24 @@ class XRAYController:
                     "download_detour": "direct-out"
                 }
             ]
+            prepend_rules.append(
+                {
+                    "rule_set": ["geoip-ru", "geosite-ru"],
+                    "action": "route",
+                    "outbound": "direct-out",
+                }
+            )
 
         client_config["inbounds"] = routing_conf["inbounds"]
-        client_config["route"] = routing_conf["route"]
+        client_config["route"]    = routing_conf["route"]
 
+        # dummy VPN config
         client_config.get("outbounds", []).pop(0)
-        server_ips = []
-        for el in client_nodes:
-            client_config["outbounds"].append(el[1])
-            server_ips.append(el[0])
 
-        client_config["route"]["rules"].insert(
-            0, {"ip_cidr": server_ips, "action": "route", "outbound": "direct-out"}
+        client_config['route']['rules'] += prepend_rules
+        client_config["route"]["rules"].append(
+            {"action": "route", "outbound": "proxy"} # final outbound
         )
-        if ru_bypass:
-            client_config["route"]["rules"].insert(
-                1, {
-                    "rule_set": [
-                        "geoip-ru",
-                        "geosite-ru"
-                        ], 
-                    "action": 
-                    "route", 
-                    "outbound": "direct-out"}
-            )
-        
-        for r in client_config["route"]["rules"]:
-            if r['action'] == 'route':
-                r['outbound'] = self.tag
 
         client_config["route"]["final"] = self.tag
         return client_config

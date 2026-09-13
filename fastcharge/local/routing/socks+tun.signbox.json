@@ -21,17 +21,8 @@
     "route": {
         "rules": [
             {
-                "ip_is_private": true,
-                "action": "route",
-                "outbound": "direct-out"
-            },
-            {
                 "protocol": "dns",
                 "action": "hijack-dns"
-            },
-            {
-                "action": "route",
-                "outbound": "proxy"
             }
         ]
     },

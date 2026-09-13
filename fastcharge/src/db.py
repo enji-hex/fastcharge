@@ -1,4 +1,6 @@
+from asyncio import Lock
 from typing import List, Optional, Self
+import aiofiles
 import aiosqlite
 from datetime import datetime, timezone
 from pydantic import BaseModel
@@ -26,8 +28,11 @@ class KeysModel(BaseModel):
     encryption: str
 
 class DBClient:
-    def __init__(self, conn: aiosqlite.Connection) -> None:
+    def __init__(self, conn: aiosqlite.Connection,
+                 db_path:str) -> None:
         self.conn = conn
+        self.db_path = db_path
+        self.write_lock = Lock()
 
     @classmethod
     async def Create(cls, db_path: str = "./files/users.db") -> Self:
@@ -53,7 +58,26 @@ class DBClient:
             );
         """,)
         await conn.commit()
-        return cls(conn)
+        return cls(conn,db_path)
+
+    async def reconnect(self,new_db_bytes:bytes) -> None:
+        tmp_path = f'{self.db_path}.tmp'
+        async with self.write_lock:
+            async with aiofiles.open(tmp_path,'wb') as f:
+                await f.write(new_db_bytes)
+            
+            async with aiosqlite.connect(tmp_path) as tmp_conn:
+                cur = await tmp_conn.execute("PRAGMA quick_check;")
+                res = await cur.fetchone()
+                if not res or res[0] != "ok":
+                    os.remove(tmp_path)
+                    raise ValueError("Invalid SQLite snapshot")
+
+            await self.conn.close()
+            os.replace(tmp_path,self.db_path)
+
+            self.conn = await aiosqlite.connect(self.db_path)
+            self.conn.row_factory = aiosqlite.Row
 
     async def set_keys(self,keys:KeysModel):
         """
