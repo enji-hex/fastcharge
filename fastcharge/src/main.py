@@ -17,6 +17,7 @@ from fastapi.openapi.utils import get_openapi
 
 from db import utc_now,parse_utc,DBClient,UserModel
 from xray_controller import XRAYController, fprint
+from xray_constructor import export_xray_config
 
 
 controller: XRAYController  = None
@@ -190,24 +191,27 @@ async def get_sub(user_id: str):
 
     return {"link": link}
 
-# @app.get(
-#     "/sub/get/json/{user_id}",
-#     summary="Get subscription json configuration",
-#     tags=["Subscription"]
-#     )
-# async def get_json_sub(user_id: str,ru_bypass:bool = True):
-#     user = await database.get_user(user_id)
-#     if not user:
-#         raise HTTPException(status_code=404, detail="User not found")
+@app.get(
+    "/sub/get/xray/{user_id}",
+    summary="Get subscription xray version",
+    tags=["Subscription"]
+    )
+async def get_json_sub(user_id: str,custom_routing = None):
+    user = await database.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
 
+    if parse_utc(user.cancel_date) < utc_now():
+        raise HTTPException(status_code=403, detail="Subscription expired")
+
+    vless_link = await controller.export_vless(user.config_id)
+    if not vless_link:
+        raise HTTPException(status_code=500,detail="Error gather XRAY vless link for")
     
-#     if parse_utc(user.cancel_date) < utc_now():
-#         raise HTTPException(status_code=403, detail="Subscription expired")
-
-#     node = await controller.export_client_outbound(user.config_id)
-#     config  =  await controller.export_full_client_config([node], ru_bypass)
-
-#     return config
+    if not custom_routing:
+        custom_routing = 'socks+tun.json'
+    xray_config  = export_xray_config(vless_link,custom_routing)
+    return xray_config
 
 @app.post(
     "/sub/add/{user_id}",

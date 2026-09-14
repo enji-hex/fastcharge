@@ -1,4 +1,11 @@
 {
+    "dns": {
+        "queryStrategy": "UseIPv4",
+        "servers": [
+            "1.1.1.1",
+            "8.8.8.8"
+        ]
+    },
     "inbounds": [
         {
             "tag": "tproxy-in",
@@ -13,18 +20,24 @@
                     "tproxy": "tproxy",
                     "mark": 255
                 }
+            },
+            "sniffing": {
+                "enabled": true,
+                "destOverride": ["http", "tls", "quic"],
+                "metadataOnly": false
             }
         }
     ],
     "routing": {
-        "domainStrategy": "AsIs",
+        "domainStrategy": "IPIfNonMatch",
         "rules": [
             {
                 "type": "field",
                 "inboundTag": [
                     "tproxy-in"
                 ],
-                "outboundTag": "vless"
+                "port":53,
+                "outboundTag": "dns-out"
             }
         ]
     }

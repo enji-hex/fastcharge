@@ -44,36 +44,11 @@
         "rules": [
             {
                 "type": "field",
-                "ip": [
-                    
-                ],
-                "outboundTag": "direct"
-            },
-            {
-                "type": "field",
-                "ip": [
-                    "geoip:private"
-                ],
-                "outboundTag": "direct"
-            },
-            {
-                "type": "field",
-                "protocol": [
-                    "dns"
-                ],
-                "outboundTag": "dns-out"
-            },
-            {
-                "type": "field",
                 "inboundTag": [
-                    "dns-out"
+                    "socks-in","tun-in"
                 ],
-                "outboundTag": "direct"
-            },
-            {
-                "type": "field",
-                "port": "0-65535",
-                "outboundTag": "vless"
+                "port":53,
+                "outboundTag": "dns-out"
             }
         ]
     }

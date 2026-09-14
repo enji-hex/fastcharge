@@ -1,19 +1,14 @@
 {
     "dns": {
-        "hosts": {
-            "dns.google": "8.8.8.8",
-            "one.one.one.one": "1.1.1.1"
-        },
         "queryStrategy": "UseIPv4",
         "servers": [
-            "https://dns.google/dns-query",
-            "https://one.one.one.one/dns-query"
+            "https://1.1.1.1/dns-query",
+            "https://8.8.8.8/dns-query"
         ]
     },
     "log": {
-        "level": "info"
+        "level": "warning"
     },
-    
     "inbounds": [
         "controlled by /routings/"
     ],
@@ -38,18 +33,6 @@
                     "fingerprint": "firefox",
                     "publicKey": "Lc-oZxwcfIqBYLlEZrf5sxggmnVDsoWqajU2tkMeZB4",
                     "shortId": "4fbc6faeb85e5b8e"
-                },
-                "tcpSettings": {
-                    "header": {
-                        "type": "none"
-                    }
-                },
-                "mux": {
-                    "enabled": false,
-                    "concurrency": -1
-                },
-                "grpcSettings": {
-                    "serviceName": "speed-test-service"
                 }
             }
         },

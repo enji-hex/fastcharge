@@ -207,6 +207,8 @@ class XRAYController:
 
         return None
 
+
+    # purge both out
     async def export_client_outbound(
         self, config_id: str
     ) -> Optional[Tuple[str, dict]]:
