@@ -10,3 +10,4 @@ keys.json
 client.conf.txt
 saved/*
 *vps.list.txt
+*.db

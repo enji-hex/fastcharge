@@ -83,9 +83,12 @@ async def lifespan(app: FastAPI):
     await controller.merge_vless_clients(active_users)
 
 
-    task = asyncio.create_task(purge_task())
+    _purge_task = asyncio.create_task(purge_task())
+    _geoupdate_task = asyncio.create_task(update_geodata_task())
+    
     yield
-    task.cancel()
+    _purge_task.cancel()
+    _geoupdate_task.cancel()
     await database.close()
 
 app = FastAPI(
@@ -249,3 +252,30 @@ async def purge_task():
             active_users = await database.get_active_users()
             await controller.merge_vless_clients(active_users)
         await asyncio.sleep(7200) # 2H
+
+async def update_geodata_task():
+    global controller
+    
+    GEO_DIR = "/usr/local/share/xray"
+    TARGET_PATH = f"{GEO_DIR}/geosite.dat"
+    TEMP_PATH = f"{GEO_DIR}/geosite.dat.tmp"
+    URL = "https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat"
+    
+    while True:
+        try:
+            cmd = f"wget -q -O {TEMP_PATH} {URL}"
+            proc = await asyncio.create_subprocess_shell(cmd)
+            returncode = await proc.wait()
+
+            if returncode == 0:
+                replace_proc = await asyncio.create_subprocess_shell(f"mv {TEMP_PATH} {TARGET_PATH}")
+                await replace_proc.wait()
+                await controller._restart_xray()
+            else:
+                print(f"Failed to download geosite.dat. wget exited with code {returncode}")
+
+        except Exception as e:
+            print(f"Error during geodata update task: {e}")
+
+        # Sleep for 12 hours (60s * 60m * 12h)
+        await asyncio.sleep(60 * 60 * 12)

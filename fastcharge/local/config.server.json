@@ -1,7 +1,7 @@
 {
     "log": {
         "access": "/var/log/xray/access.log",
-        "loglevel": "info"
+        "loglevel": "warning"
     },
     "inbounds": [
         {

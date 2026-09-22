@@ -20,6 +20,7 @@ def fprint(*l):
     """Print tag W20 data"""
     print("\n".join(f'{f"§ {t}":<20}{d}' for t, d in l))
 
+
 class XRAYController:
     def __init__(
         self,
@@ -57,7 +58,7 @@ class XRAYController:
         block_torrents: bool = False,
     ):
         """
-        Srever side function 
+        Srever side function
         Update keys in server,client configs
         """
 
@@ -67,10 +68,10 @@ class XRAYController:
         inbound["tag"] = self.tag
         inbound["port"] = self.port
         inbound["streamSettings"]["realitySettings"]["privateKey"] = self.keys.private
-        inbound["streamSettings"]["realitySettings"]["shortIds"]   = [self.keys.short_id]
+        inbound["streamSettings"]["realitySettings"]["shortIds"] = [self.keys.short_id]
         inbound["streamSettings"]["realitySettings"]["serverNames"] = [self.sni]
-        inbound["streamSettings"]["realitySettings"]["target"]  = f"{self.sni}:443"
-        inbound["streamSettings"]["network"] = 'tcp'
+        inbound["streamSettings"]["realitySettings"]["target"] = f"{self.sni}:443"
+        inbound["streamSettings"]["network"] = "tcp"
         inbound["settings"]["decryption"] = self.keys.decryption
 
         if block_torrents:
@@ -78,9 +79,16 @@ class XRAYController:
                 {"type": "field", "protocol": ["bittorrent"], "outboundTag": "block"}
             )
 
+        # block ads
+        server_config.get("routing", {}).get("rules", []).append(
+            {"type": "field", 
+             "domain": ["geosite:category-ads-all"], 
+             "outboundTag": "block"
+            }
+        )
+
         await self.save_config(self.server_config_path, server_config)
-        print(f'keys updated ')
-   
+        print(f"keys updated ")
 
     @staticmethod
     def generate_mlken():
@@ -203,10 +211,11 @@ class XRAYController:
                         clean_params = {k: v for k, v in params.items() if v}
 
                         query = urlencode(clean_params, safe=":")
-                        return f"vless://{id}@{self.ip}:{port}?{query}#{quote(self.tag)}"
+                        return (
+                            f"vless://{id}@{self.ip}:{port}?{query}#{quote(self.tag)}"
+                        )
 
         return None
-
 
     # purge both out
     async def export_client_outbound(
@@ -220,10 +229,10 @@ class XRAYController:
         for outbound in client_config.get("outbounds", []):
             if outbound.get("tag") == "proxy":
                 out = outbound
-                out['flow'] = 'xtls-rprx-vision'
+                out["flow"] = "xtls-rprx-vision"
                 out["tag"] = self.tag
-                out['tls']["reality"]["public_key"] = self.keys.public
-                out['tls']["reality"]["short_id"] = self.keys.short_id
+                out["tls"]["reality"]["public_key"] = self.keys.public
+                out["tls"]["reality"]["short_id"] = self.keys.short_id
                 out["tls"]["server_name"] = self.sni
                 out["server"] = self.ip
                 out["server_port"] = self.port
@@ -257,7 +266,6 @@ class XRAYController:
             # 2. Bypass local private network traffic
             {"ip_is_private": True, "action": "route", "outbound": "direct-out"},
         ]
-        
 
         if ru_bypass:
             routing_conf["route"]["rule_set"] = [
@@ -273,8 +281,8 @@ class XRAYController:
                     "type": "remote",
                     "format": "binary",
                     "url": "https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-ru.srs",
-                    "download_detour": "direct-out"
-                }
+                    "download_detour": "direct-out",
+                },
             ]
             prepend_rules.append(
                 {
@@ -285,14 +293,14 @@ class XRAYController:
             )
 
         client_config["inbounds"] = routing_conf["inbounds"]
-        client_config["route"]    = routing_conf["route"]
+        client_config["route"] = routing_conf["route"]
 
         # dummy VPN config
         client_config.get("outbounds", []).pop(0)
 
-        client_config['route']['rules'] += prepend_rules
+        client_config["route"]["rules"] += prepend_rules
         client_config["route"]["rules"].append(
-            {"action": "route", "outbound": "proxy"} # final outbound
+            {"action": "route", "outbound": "proxy"}  # final outbound
         )
 
         client_config["route"]["final"] = self.tag
