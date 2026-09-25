@@ -13,7 +13,7 @@ so it's not a ready tool, just template.
 - Install UV `curl -LsSf https://astral.sh/uv/install.sh | sh`
 - `bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install`
 - sync UV
-- setup initial keys: uv run python src/main.py -s 
+
 
 # Project layout
 
@@ -22,11 +22,9 @@ src/        # all .py files
 local/      
     - # references for routing, server/client configs
     - # keys.json (keys for xray)
-users.db
+files/users.db
 ```
 
-# EP how to update 
-Update only src folder
 
 # Functions
 

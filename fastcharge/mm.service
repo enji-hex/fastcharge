@@ -1,0 +1,12 @@
+[Unit]
+Description=mm-relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/socat TCP-LISTEN:8443,fork,reuseaddr TCP:45.59.119.189:443
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

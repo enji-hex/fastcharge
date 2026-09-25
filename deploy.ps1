@@ -1,4 +1,4 @@
-$server_ip="83.147.245.51"
+$server_ip="45.59.119.189"
 $server_str="root@$server_ip"
 $server_port = 443
 
@@ -9,6 +9,15 @@ ssh $server_str "
 
 $service_not_exists  = ($LASTEXITCODE -ne 0)
 
+
+
+# apt-get update
+#     apt-get upgrade -y
+    
+#     echo "Installing Xray..."
+#     bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
+#     echo "Install uv"
+#     curl -LsSf https://astral.sh/uv/install.sh | sh
 
 if ($service_not_exists) {
     Write-Host  -ForegroundColor Cyan "Warning server uninitizlized, start .venv creation"
@@ -22,31 +31,33 @@ if ($service_not_exists) {
     $envData | ssh $server_str "cat > /root/fastcharge/.env"
 
     # setup command
-    $cmd = "
+    $cmd = @'
     set -e
+
     cd /root/fastcharge
     uv sync
 
     openssl req -x509 -newkey rsa:2048 \
         -keyout key.pem \
-        -out    cert.pem \
+        -out cert.pem \
         -sha256 \
         -days 3650 \
         -nodes \
-        -subj '/CN=fastcharge'
+        -subj '/CN=localhost'
 
     systemctl daemon-reload
     systemctl enable fastcharge
     systemctl start fastcharge
-    "
+'@
 
     scp -r  .\fastcharge\*  "${server_str}:/root/fastcharge/"
 } 
 else {
-    # Update local data only, don't touch /files
+    Write-Host  -ForegroundColor Cyan "Update local data only, don't touch /files"
     $cmd = "systemctl restart fastcharge"
     scp -r  .\fastcharge\src\*    "${server_str}:/root/fastcharge/src/"
     scp -r  .\fastcharge\local\*  "${server_str}:/root/fastcharge/local/"
+    
 }
 
 ssh $server_str $cmd
