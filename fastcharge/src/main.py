@@ -77,8 +77,10 @@ async def lifespan(app: FastAPI):
                                 tag=os.getenv('tag',''),
                                 server_config_path=SERVER_CONF,
                                 keys=keys)
-    
-    await controller.update_reality_key(block_torrents=True)
+
+    use_pi_hole = os.getenv('use_pi_hole', '').lower() in ('1', 'true')
+
+    await controller.update_reality_key(block_torrents=True,use_pi_hole=use_pi_hole)
     active_users = await database.get_active_users()
     await controller.merge_vless_clients(active_users)
 

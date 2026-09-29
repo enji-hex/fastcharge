@@ -9,9 +9,7 @@
             "port": 443,
             "protocol": "vless",
             "settings": {
-                "clients": [
-                   
-                ],
+                "clients": [],
                 "decryption": "none"
             },
             "streamSettings": {
@@ -36,7 +34,9 @@
                         "type": "none"
                     }
                 },
-                "grpcSettings": {"serviceName": "speed-test-service"}
+                "grpcSettings": {
+                    "serviceName": "speed-test-service"
+                }
             },
             "sniffing": {
                 "enabled": true,

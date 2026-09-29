@@ -54,8 +54,7 @@ class XRAYController:
         await proc.wait()
 
     async def update_reality_key(
-        self,
-        block_torrents: bool = False,
+        self, block_torrents: bool = False, use_pi_hole: bool = False
     ):
         """
         Srever side function
@@ -63,6 +62,32 @@ class XRAYController:
         """
 
         server_config = await self.load_config(SERVER_SRC_CONFIG_PATH)
+
+        if use_pi_hole:
+            print("Use Pi-Hole True")
+            server_config["dns"] = {"servers": ["127.0.0.1"]}
+
+            server_config["outbounds"].append(
+                {
+                    "protocol": "dns",
+                    "tag": "dns-out",
+                    "settings": {
+                        "rewriteNetwork": "udp",
+                        "rewriteAddress": "127.0.0.1",
+                        "rewritePort": 53,
+                        "rules": [{"action": "direct"}],
+                    },
+                }
+            )
+            server_config["routing"]["rules"].append(
+                {
+                    "inboundTag": ["proxy"],
+                    "port": 53,
+                    "network": "tcp,udp",
+                    "outboundTag": "dns-out",
+                }
+            )
+
         inbound = server_config.get("inbounds", [])[0]
 
         inbound["tag"] = self.tag
@@ -81,9 +106,10 @@ class XRAYController:
 
         # block ads
         server_config.get("routing", {}).get("rules", []).append(
-            {"type": "field", 
-             "domain": ["geosite:category-ads-all"], 
-             "outboundTag": "block"
+            {
+                "type": "field",
+                "domain": ["geosite:category-ads-all"],
+                "outboundTag": "block",
             }
         )
 
