@@ -1,0 +1,26 @@
+#!/bin/sh
+
+printf "Content-Type: application/json\r\n\r\n"
+
+if [ "$REQUEST_METHOD" = "POST" ]; then
+    read -r Q
+    case "$Q" in
+        *action=restart*)
+            /mnt/usb/xray-route-nft.sh start >/dev/null 2>&1
+            /etc/init.d/xray-ow restart >/dev/null 2>&1
+            ;;
+        *action=stop*)
+            /mnt/usb/xray-route-nft.sh stop >/dev/null 2>&1
+            /etc/init.d/xray-ow stop >/dev/null 2>&1
+            ;;
+        *sub_url=*)
+            URL="${Q##*sub_url=}"
+            echo "$URL" > /mnt/usb/sub.url
+            ;;
+    esac
+fi
+
+pgrep xray >/dev/null && X="active" || X="disabled"
+nft list table inet xray >/dev/null 2>&1 && T="active" || T="disabled"
+
+printf '{"xray":"%s","tproxy":"%s"}' "$X" "$T"

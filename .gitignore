@@ -11,3 +11,4 @@ client.conf.txt
 saved/*
 *vps.list.txt
 *.db
+./XRAY_CONN/**.json

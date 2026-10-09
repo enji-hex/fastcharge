@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Router-Control</title>
+</head>
+<body>
+    <h1>Router Control</h1>
+    <div style="display: flex;flex-direction: column; gap: 0.5rem;max-width: 300px;">
+        <span id="xray_status"></span>
+        <span id="tproxy_status"></span>
+        
+        <input type="text" id="sub" placeholder="Subscription URL">
+        <button onclick="send('sub_url='+encodeURIComponent(sub.value))">
+            Set Subscirption
+        </button>
+        <button onclick="send('action=restart')">Restart</button>
+        <button onclick="send('action=stop')">Stop</button>
+    </div>
+    <script>
+        const get = async () => {
+            try {
+                const res = await fetch('/cgi-bin/api')
+                const data = await res.json()
+                xray_status.textContent   = "XRAY:" + data.xray
+                tproxy_status.textContent = "TPROXY:" + data.tproxy
+            } catch (e) {
+                console.error("failed to laod data",e);
+            }
+            
+        }
+
+        const send = async (body) => {
+            resp = await fetch("/cgi-bin/api",{
+                method:"POST",
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body
+            });
+            setTimeout(upateStatus,1000);
+        }
+
+        get();
+        setInterval(get, 5000);
+    </script>
+</body>
+</html>
