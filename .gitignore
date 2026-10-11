@@ -12,5 +12,4 @@ saved/*
 *.db
 
 *config.json
-
 ./XRAY_CONN/**.json
