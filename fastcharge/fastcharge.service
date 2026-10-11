@@ -13,7 +13,6 @@ ExecStart=/root/fastcharge/.venv/bin/uvicorn main:app \
     --ssl-keyfile  /root/fastcharge/key.pem \
     --ssl-certfile /root/fastcharge/cert.pem \
     --no-server-header
-
 Restart=always 
 RestartSec=5
 

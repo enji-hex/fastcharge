@@ -5,10 +5,12 @@ client_conf.txt
 *.exe
 keys.json
 
-/*.json
 .env
 client.conf.txt
 saved/*
 *vps.list.txt
 *.db
+
+*config.json
+
 ./XRAY_CONN/**.json

@@ -1,43 +1,44 @@
+# FastCharge
 
-# xray_controller.py
+> _A minimal, lightweight control plane for Xray process lifecycles and configuration management._
 
-> The most **stupid** tool to control XRAY configs on ur server
+FastCharge was built to replace heavy web dashboards (like 3x-UI) with a simple, zero-bloat orchestration pipeline designed strictly for process and JSON configuration control.
 
-I was got crazy about 3x-UI - the entire dashboard built only for `JSON` controlling. So I decided to make stupidly simple tool that control xray for my daily tasks
+## Features
+- **Automated Key Generation:** Generates node-specific encryption keys on provisioning.
+- **Client Management:** Provision, revoke, and track clients by subscription expiration time.
+- **Template-Based Configs:** Generates modular client and server configurations separating core rules and routing tables.
+- **Dual Export Formats:** Exports client configurations as direct `vless://` URI links or fully compliant Xray JSON objects.
 
-Currently support:  VLESS + TCP + REALITY + Vision, but of course you can easily extend it,
-so it's not a ready tool, just template.
+## Deployment
 
-# depploy 
-- Generate certs `openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem -days 365 -subj "/CN=localhost"`
-- Install UV `curl -LsSf https://astral.sh/uv/install.sh | sh`
-- `bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install`
-- sync UV
+Node deployements are managed by [`./deploy.sh`](./deploy.sh) script.
 
+**Initial setup** \
+On the first run, the script installs `uv`, `xray`, generates self-signed TLS certificates, and registers the `fastcharge.service` systemd unit file.
 
-# Project layout
+**Updates** \
+Subsequent script executions sync updated source files from `./src` and active Xray routing templates from `./local`. Pass `-f` to force a complete database reset on the target node.
 
-```sh
-src/        # all .py files
-local/      
-    - # references for routing, server/client configs
-    - # keys.json (keys for xray)
-files/users.db
+```
+# Deploy or update remote server node
+./deploy.sh -s=127.0.0.1 -p=443
 ```
 
 
-# Functions
+## Project layout
+```sh
+fastcharge/
+    src/    # Core FastAPI control plane & database models
+    local/  # Xray JSON templates and routing rules
+    files/  # Server-side SQLite database
+openwrt-service/ # [!testing] OpenWrt CGI/shell service for router integration
+```
 
-- Generate keys, append clients
-- Remove clients (or reset all)
-- Create server config from template
-- Create client config from template
-- Create shared link for gui apps like nekoray,v2rayA etc.
-
-
-## refs.
+## References
 - [xray install](https://github.com/XTLS/Xray-install)
-- [xray config example](/usr/local/etc/xray/config.json)
 
-## TODO 
-- create one-liner autosetup for serevr
+## License
+
+This project is licensed under the MIT License. 
+Feel free to use and update this code as you wish.

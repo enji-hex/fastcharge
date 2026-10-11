@@ -100,7 +100,6 @@ app = FastAPI(
     redoc_url=None,
     )
 
-
 # Secure docs
 @app.get("/docs", include_in_schema=False)
 async def get_swagger_documentation(api_key: str = Depends(verify_api_key)):
@@ -114,6 +113,9 @@ async def get_swagger_documentation(api_key: str = Depends(verify_api_key)):
 async def get_open_api_endpoint():
     return get_openapi(title="Secure API", version=VERSION, routes=app.routes)
 
+@app.get("/health")
+async def health():
+    return {"status":"alive"}
 
 @app.post(
     "/user/add/{user_id}",
