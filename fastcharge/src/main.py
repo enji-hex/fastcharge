@@ -24,7 +24,7 @@ controller: XRAYController  = None
 database: DBClient          = None
 API_KEY:str                 = None
 API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
-VERSION = "1.0.2"
+VERSION = "1.0.0"
 
 async def verify_api_key(request: Request):
     # Header (X-API-Key) - for SDK
