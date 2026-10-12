@@ -40,4 +40,6 @@ openwrt-service/ # [!testing] OpenWrt CGI/shell service for router integration
 ## License
 
 This project is licensed under the MIT License. 
-Feel free to use and update this code as you wish.
+
+Feel free to use, modify, and update this code as you wish. \
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
