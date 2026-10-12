@@ -25,7 +25,6 @@ Subsequent script executions sync updated source files from `./src` and active X
 ./deploy.sh -s=127.0.0.1 -p=443
 ```
 
-
 ## Project layout
 ```sh
 fastcharge/
