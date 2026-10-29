@@ -10,6 +10,10 @@ FastCharge was built to replace heavy web dashboards (like 3x-UI) with a simple,
 - **Template-Based Configs:** Generates modular client and server configurations separating core rules and routing tables.
 - **Dual Export Formats:** Exports client configurations as direct `vless://` URI links or fully compliant Xray JSON objects.
 
+
+> Warning
+> Used XARY version: [v26.3.27](https://github.com/XTLS/Xray-core/releases/tag/), newer versions coud broken setup
+
 ## Deployment
 
 Node deployements are managed by [`./deploy.sh`](./deploy.sh) script.
