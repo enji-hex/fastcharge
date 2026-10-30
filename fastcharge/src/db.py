@@ -5,6 +5,7 @@ import aiosqlite
 from datetime import datetime, timezone
 from pydantic import BaseModel
 import os
+import aiohttp
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -27,15 +28,25 @@ class KeysModel(BaseModel):
     decryption: str
     encryption: str
 
+
+
 class DBClient:
     def __init__(self, conn: aiosqlite.Connection,
-                 db_path:str) -> None:
+                 db_path:str,
+                 api_key:str,
+                 dependent_nodes:list[str] = []) -> None:
         self.conn = conn
         self.db_path = db_path
+        self.api_key = api_key
+        self.dependent_nodes = dependent_nodes
         self.write_lock = Lock()
 
     @classmethod
-    async def Create(cls, db_path: str = "./files/users.db") -> Self:
+    async def Create(cls, 
+                     dependent_nodes:list[str],
+                     api_key:str,
+                     db_path: str = "./files/users.db"
+                     ) -> Self:
         os.makedirs('./files',exist_ok=True)
         conn = await aiosqlite.connect(db_path)
         # Enable dictionary-like row mapping for UserModel (**dict(row))
@@ -58,7 +69,12 @@ class DBClient:
             );
         """,)
         await conn.commit()
-        return cls(conn,db_path)
+        return cls(conn,db_path,api_key,dependent_nodes)
+
+    async def get_snaphot(self):
+        async with self.write_lock:
+            async with aiofiles.open(self.db_path,'rb') as f:
+                return await f.read()
 
     async def reconnect(self,new_db_bytes:bytes) -> None:
         tmp_path = f'{self.db_path}.tmp'
@@ -103,7 +119,7 @@ class DBClient:
             return KeysModel(**dict(row)) if row else None
 
     async def add_user(self, user_id: str, config_id: str) -> UserModel:
-        """Register a new user."""
+        """[Mutating] Register a new user."""
         cancel_iso = utc_now().isoformat()
         user = UserModel(
             user_id=user_id,
@@ -117,7 +133,17 @@ class DBClient:
             (user_id, config_id, cancel_iso),
         )
         await self.conn.commit()
+        await self.update_nodes()
         return user
+
+    async def upd_user_cancel_date(self, user_id: str, cancel_date: str) -> None:
+            """[Mutating] Update subscription cancellation date."""
+            await self.conn.execute(
+                "UPDATE users SET cancel_date = ? WHERE user_id = ?;",
+                (cancel_date, user_id),
+            )
+            await self.conn.commit()
+            await self.update_nodes()
 
     async def get_user(self, user_id: str) -> UserModel | None:
         """Fetch user by Telegram ID."""
@@ -144,14 +170,28 @@ class DBClient:
         now = utc_now()
         return [u for u in users if parse_utc(u.cancel_date) > now]
 
-    async def upd_user_cancel_date(self, user_id: str, cancel_date: str) -> None:
-        """Update subscription cancellation date."""
-        await self.conn.execute(
-            "UPDATE users SET cancel_date = ? WHERE user_id = ?;",
-            (cancel_date, user_id),
-        )
-        await self.conn.commit()
+    
 
     async def close(self) -> None:
         """Close connection gracefully."""
         await self.conn.close()
+
+    async def update_nodes(self):
+        """
+        Updates list of dependent nodes with port
+        """
+        db_snap = await self.get_snaphot()
+        connector = aiohttp.TCPConnector(ssl=False)
+        session = aiohttp.ClientSession(connector=connector,connector_owner=True)
+        form = aiohttp.FormData()
+        form.add_field(
+            'file',
+            db_snap,
+            filename="users.db",
+            content_type='application/octet-stream'
+        )
+
+        for s in self.dependent_nodes:
+            await session.post(f"https://{s}/update",data=form,headers={"X-API-Key": self.api_key})
+
+        await session.close()

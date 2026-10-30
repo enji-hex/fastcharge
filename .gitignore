@@ -12,4 +12,5 @@ saved/*
 *.db
 
 *config.json
+*config.toml
 ./XRAY_CONN/**.json

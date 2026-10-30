@@ -240,7 +240,6 @@ class XRAYController:
                         return (
                             f"vless://{id}@{self.ip}:{port}?{query}#{quote(self.tag)}"
                         )
-
         return None
 
     # purge both out

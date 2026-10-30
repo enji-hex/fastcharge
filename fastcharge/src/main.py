@@ -2,10 +2,14 @@ from typing import List, Optional
 import uuid
 
 import aiofiles
-from dotenv import load_dotenv
+import aiohttp
+import json
 import os
 import asyncio
+import tomllib
 from datetime import datetime, timezone
+
+
 
 from contextlib import asynccontextmanager
 from argparse import ArgumentParser
@@ -18,11 +22,13 @@ from fastapi.openapi.utils import get_openapi
 from db import utc_now,parse_utc,DBClient,UserModel
 from xray_controller import XRAYController, fprint
 from xray_constructor import export_xray_config
+import http_client
 
 
 controller: XRAYController  = None
 database: DBClient          = None
 API_KEY:str                 = None
+DEPENDENT_NODES             = []
 API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
 VERSION = "1.0.0"
 
@@ -46,18 +52,17 @@ async def verify_api_key(request: Request):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global controller, database,API_KEY
-    load_dotenv()
-    database = await DBClient.Create()
-    server_ip:str   = os.getenv("server_ip","")
+    global controller, database,API_KEY,DEPENDENT_NODES
+    with open('./config.toml','rb') as f:
+        cfg = tomllib.load(f)
 
-    try:
-        server_port     = int(os.getenv("server_port","8080"))
-    except Exception as err:
-        raise Exception(f"Error get server port from .env {err}")
+    DEPENDENT_NODES = cfg.get("dependent_nodes",[])
+    database = await DBClient.Create(DEPENDENT_NODES,cfg['API_KEY'])
+    server_ip:str   = cfg["server_ip"]
+    server_port     = int(cfg.get("server_port",8080))
 
-    API_KEY = os.getenv("API_KEY","")
-    SERVER_CONF = os.getenv('server_config_path')
+    API_KEY     = cfg.get("API_KEY","")
+    SERVER_CONF = cfg.get('server_config_path')
     if not API_KEY or not SERVER_CONF:
         raise Exception("Error API_KEY not found")
 
@@ -73,12 +78,12 @@ async def lifespan(app: FastAPI):
 
     controller = XRAYController(ip=server_ip,
                                 port=server_port,
-                                sni=os.getenv('sni',''),
-                                tag=os.getenv('tag',''),
+                                sni=cfg.get('sni',''),
+                                tag=cfg.get('tag',''),
                                 server_config_path=SERVER_CONF,
                                 keys=keys)
 
-    use_pi_hole = os.getenv('use_pi_hole', '').lower() in ('1', 'true')
+    use_pi_hole = cfg.get('use_pi_hole', False)
 
     await controller.update_reality_key(block_torrents=True,use_pi_hole=use_pi_hole)
     active_users = await database.get_active_users()
@@ -131,8 +136,8 @@ async def add_user(user_id: str):
     config_id = str(uuid.uuid4())
     try:
         await database.add_user(user_id, config_id)
-    except Exception:
-        raise HTTPException(detail="Error adding new user", status_code=500)
+    except Exception as err:
+        raise HTTPException(detail=f"Error adding new user {err}", status_code=500)
     return {"msg": "success"}
         
 
@@ -176,7 +181,7 @@ async def update_state(file:UploadFile):
     
     active_users = await database.get_active_users()
     await controller.merge_vless_clients(active_users)
-    return {"msg":"database was updates"}
+    return {"msg":"database was updated"}
 
 @app.get(
     "/sub/get/{user_id}",
@@ -184,19 +189,40 @@ async def update_state(file:UploadFile):
     tags=["Subscription"]
     )
 async def get_sub(user_id: str):
+    """Get sub from only this server"""
     user = await database.get_user(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    
     if parse_utc(user.cancel_date) < utc_now():
         raise HTTPException(status_code=403, detail="Subscription expired")
 
     link  =  await controller.export_vless(user.config_id)
     if not link:
         raise HTTPException(status_code=500, detail="Failed to generate link")
-
     return {"link": link}
+
+@app.get(
+    "/subs/get/{user_id}",
+    summary="Get subscription link by user_id",
+    tags=["Subscription"]
+    )
+async def get_subs(user_id: str):
+    """Get sub from all available nodes"""
+    user = await database.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if parse_utc(user.cancel_date) < utc_now():
+        raise HTTPException(status_code=403, detail="Subscription expired")
+
+    link  =  await controller.export_vless(user.config_id)
+    if not link:
+        raise HTTPException(status_code=500, detail="Failed to generate link")
+    links = [link]
+    links += await http_client.get_subs(user_id,DEPENDENT_NODES,API_KEY)
+
+    return {"links": links}
+
 
 @app.get(
     "/sub/get/xray/{user_id}",

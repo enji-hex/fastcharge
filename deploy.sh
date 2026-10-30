@@ -38,11 +38,6 @@ if ! ssh  "$server_str" "$check_cmd"; then
     echo "Warning server uninitizlized, start .venv creation"
     scp  ./fastcharge/fastcharge.service "${server_str}:/etc/systemd/system/fastcharge.service"
     
-    # .ENV
-    sed -i -e "s/server_ip=.*/server_ip=$server_ip/g" \
-        -e "s/server_port=.*/server_port=$server_port/g" \
-        ./fastcharge/.env
-
 cmd="
 set -e
 
@@ -60,7 +55,7 @@ command -v uv >/dev/null 2>&2 || {
 }
 
 command -v xray >/dev/null 2>&2 || {
-    curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh | bash -s -- install
+    curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh | bash -s -- install --version v26.3.27
 }
 
 cd /root/fastcharge
@@ -87,6 +82,8 @@ else
     cmd="systemctl restart fastcharge"
     scp  -r  ./fastcharge/src/*    "${server_str}:/root/fastcharge/src/"
     scp  -r  ./fastcharge/local/*  "${server_str}:/root/fastcharge/local/"
+    # set new config in both cases
+    scp  -r  ./fastcharge/config.toml  "${server_str}:/root/fastcharge/config.toml"
     
 fi
 

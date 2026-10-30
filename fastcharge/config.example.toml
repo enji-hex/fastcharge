@@ -1,0 +1,9 @@
+API_KEY=""
+# /usr/local/etc/xray/config.json
+server_config_path="/usr/local/etc/xray/config.json"
+server_ip=""
+server_port=443
+tag="proxy"
+sni="www.wikipedia.org"
+use_pi_hole=false
+dependent_nodes=[]

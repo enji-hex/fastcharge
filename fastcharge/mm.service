@@ -4,7 +4,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-ExecStart=/usr/bin/socat TCP-LISTEN:8443,fork,reuseaddr TCP:45.59.119.189:443
+ExecStart=/usr/bin/socat TCP4-LISTEN:8443,fork,reuseaddr TCP4:45.59.119.189:443
 Restart=always
 RestartSec=2
 
